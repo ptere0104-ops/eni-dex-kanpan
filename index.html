@@ -120,7 +120,8 @@ body::before {
   border-color: #17564c;
   background: #0a1a17;
 }
-.price-block { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.price-block { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
+.price-line { display: flex; align-items: baseline; gap: 8px; }
 .price-last {
   font-family: var(--mono);
   font-size: 30px;
@@ -128,16 +129,26 @@ body::before {
   letter-spacing: -.02em;
   line-height: 1;
 }
+.price-last::before {
+  content: '$';
+  font-size: 0.45em;
+  font-weight: 400;
+  color: var(--muted);
+  margin-right: 3px;
+}
 .price-chg {
   font-family: var(--mono);
   font-size: 12px;
   font-weight: 500;
-  padding: 2px 6px;
+  padding: 0;
   border-radius: 3px;
 }
-.price-chg.up { color: var(--up); background: #0f2a22; }
-.price-chg.down { color: var(--down); background: #2a1314; }
-.price-chg.flat { color: var(--muted); background: #161d24; }
+.price-chg.up { color: var(--up); background: transparent; }
+.price-chg.down { color: var(--down); background: transparent; }
+.price-chg.flat { color: var(--muted); background: transparent; }
+.price-last.up { color: var(--up); }
+.price-last.down { color: var(--down); }
+.price-last.flat { color: var(--text); }
 .price-tag {
   font-size: 10px;
   color: var(--dim);
@@ -688,9 +699,11 @@ body::before {
     </div>
     <div class="pairs" id="pairs"></div>
     <div class="price-block">
-      <span class="price-last" id="lastPrice">—</span>
+      <div class="price-line">
+        <span class="price-last" id="lastPrice">—</span>
+        <span class="price-tag">USDT</span>
+      </div>
       <span class="price-chg flat" id="changePct">—</span>
-      <span class="price-tag">USDT</span>
     </div>
     <div class="status">
       <i class="dot wait" id="statusDot"></i>
@@ -1577,6 +1590,7 @@ function renderStats() {
     var chg = (state.last - state.open24) / state.open24 * 100;
     el.change.textContent = pctText(chg);
     el.change.className = 'price-chg ' + toneClass(chg);
+    el.last.className = 'price-last ' + toneClass(chg);
   }
 
   var rows = state.matches.slice(0, 200);
@@ -1911,6 +1925,7 @@ function loadStats() {
       var chg = (state.last - state.open24) / state.open24 * 100;
       el.change.textContent = pctText(chg);
       el.change.className = 'price-chg ' + toneClass(chg);
+    el.last.className = 'price-last ' + toneClass(chg);
     }
     fetchMcap();
     fetch24hStats();
@@ -2141,6 +2156,7 @@ function switchPair(key) {
   el.last.textContent = '—';
   el.change.textContent = '—';
   el.change.className = 'price-chg flat';
+  el.last.className = 'price-last flat';
   el.chartPair.textContent = next.label;
   el.sVolUnit.textContent = next.base;
 
