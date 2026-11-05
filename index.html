@@ -265,6 +265,24 @@ body::before {
 .chart-panel { min-height: 600px; }
 .chart-wrap { position: relative; flex: 1; display: flex; min-height: 0; padding: 4px 4px 6px; }
 #kline { width: 100%; height: 100%; min-height: 392px; }
+/* K 线图上的均线数值条，覆盖在 canvas 上 */
+.ma-legend, .vol-legend {
+  position: absolute;
+  left: 14px;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.5;
+  pointer-events: none;
+  z-index: 5;
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+.ma-legend { top: 8px; }
+.vol-legend { bottom: 20%; }
+@media (max-width: 520px) {
+  .ma-legend { top: 6px; left: 10px; font-size: 9px; }
+  .vol-legend { left: 10px; font-size: 9px; }
+}
 .chart-foot {
   display: flex;
   justify-content: space-between;
@@ -697,6 +715,8 @@ body::before {
       </div>
       <div class="chart-wrap">
         <div id="kline"></div>
+        <div id="maLegend" class="ma-legend"></div>
+        <div id="volLegend" class="vol-legend"></div>
       </div>
       <div class="chart-foot">
         <span id="chartFoot">—</span>
@@ -768,6 +788,9 @@ body::before {
           <div class="summary-cell"><div class="k">24H 成交额</div><div class="v" id="sQuote">—<span class="u">USDT</span></div></div>
           <div class="summary-cell"><div class="k">24H 开盘</div><div class="v" id="sOpen">—</div></div>
           <div class="summary-cell"><div class="k">当前价差</div><div class="v" id="sSpread">—</div></div>
+          <div class="summary-cell"><div class="k">流通市值</div><div class="v" id="sMcap">—<span class="u">USDT</span></div></div>
+          <div class="summary-cell"><div class="k">24H 成交笔数</div><div class="v" id="sTxCnt">—</div></div>
+          <div class="summary-cell"><div class="k">24H 活跃地址</div><div class="v" id="sWallets">—</div></div>
         </div>
         <div class="flow-strip">
           <div class="flow-cell"><div class="k">窗口主动买</div><div class="v up" id="flowBuy">—</div></div>
@@ -1042,6 +1065,8 @@ var el = {
   tf: document.getElementById('tfGroup'),
   chartPair: document.getElementById('chartPairLabel'),
   chartFoot: document.getElementById('chartFoot'),
+  maLegend: document.getElementById('maLegend'),
+  volLegend: document.getElementById('volLegend'),
   kline: document.getElementById('kline'),
   asks: document.getElementById('asks'),
   bids: document.getElementById('bids'),
@@ -1066,6 +1091,9 @@ var el = {
   sQuote: document.getElementById('sQuote'),
   sOpen: document.getElementById('sOpen'),
   sSpread: document.getElementById('sSpread'),
+  sMcap: document.getElementById('sMcap'),
+  sTxCnt: document.getElementById('sTxCnt'),
+  sWallets: document.getElementById('sWallets'),
   flowBuy: document.getElementById('flowBuy'),
   flowSell: document.getElementById('flowSell'),
   flowNet: document.getElementById('flowNet'),
@@ -1119,6 +1147,43 @@ function klineOption() {
       itemStyle: { color: k.c >= k.o ? '#2ac08a55' : '#ef535055' }
     };
   });
+  /* 简单移动平均：前 n-1 根没有值，避免误连成一条斜线 */
+  function sma(data, n) {
+    var out = new Array(data.length).fill(null);
+    var sum = 0;
+    for (var i = 0; i < data.length; i++) {
+      sum += data[i];
+      if (i >= n) { sum -= data[i - n]; }
+      if (i >= n - 1) { out[i] = +(sum / n).toFixed(8); }
+    }
+    return out;
+  }
+  var closes = rows.map(function (k) { return k.c; });
+  var ma5 = sma(closes, 5), ma10 = sma(closes, 10), ma30 = sma(closes, 30);
+  var volsRaw = rows.map(function (k) { return k.v; });
+  var vma7 = sma(volsRaw, 7), vma30 = sma(volsRaw, 30);
+  /* 现价标签按涨跌上色 */
+  var prevClose = rows.length > 1 ? rows[rows.length - 2].c : last;
+  var nowUp = (last != null && prevClose != null) ? last >= prevClose : true;
+
+  /* 左上角均线数值条（必须在 return 前更新 DOM） */
+  if (rows.length) {
+    var i = rows.length - 1;
+    function f(v) { return v == null ? '—' : fmtPrice(v); }
+    el.maLegend.innerHTML =
+      '<span style="color:#f0b90b">MA5: ' + f(ma5[i]) + '</span>' +
+      '<span style="color:#74838f">　</span>' +
+      '<span style="color:#4a9eff">MA10: ' + f(ma10[i]) + '</span>' +
+      '<span style="color:#74838f">　</span>' +
+      '<span style="color:#b07cff">MA30: ' + f(ma30[i]) + '</span>';
+    el.volLegend.innerHTML =
+      '<span style="color:#74838f">VOL(' + state.interval + ')</span>' +
+      '<span style="color:#e4ecf2"> ' + fmtQty(rows[i].v) + '</span>' +
+      '<span style="color:#74838f">　</span>' +
+      '<span style="color:#f0b90b">MA7: ' + (vma7[i] == null ? '—' : fmtQty(vma7[i])) + '</span>' +
+      '<span style="color:#74838f">　</span>' +
+      '<span style="color:#b07cff">MA30: ' + (vma30[i] == null ? '—' : fmtQty(vma30[i])) + '</span>';
+  }
   var last = state.last;
   /* 手机窄屏：右轴只留窄边，副图坐标轴标签隐藏，避免挤在图表上 */
   var narrow = window.innerWidth < 520;
@@ -1247,15 +1312,37 @@ function klineOption() {
         markLine: last ? {
           silent: true,
           symbol: 'none',
-          lineStyle: { color: PALETTE.warn, type: 'dashed', width: 1, opacity: 0.7 },
+          lineStyle: { color: nowUp ? PALETTE.up : PALETTE.down, type: 'dashed', width: 1, opacity: 0.7 },
           label: {
-            position: 'end',
-            color: PALETTE.warn,
+            position: 'insideEndTop',
+            backgroundColor: nowUp ? PALETTE.up : PALETTE.down,
+            color: '#041410',
+            padding: [2, 5],
+            borderRadius: 2,
             fontSize: 10,
+            fontWeight: 600,
             formatter: function () { return fmtPrice(last); }
           },
           data: [{ yAxis: last }]
         } : null
+      },
+      {
+        name: 'MA5', type: 'line', data: ma5,
+        xAxisIndex: 0, yAxisIndex: 0,
+        smooth: true, symbol: 'none', silent: true,
+        lineStyle: { width: 1, color: '#f0b90b', opacity: 0.9 }
+      },
+      {
+        name: 'MA10', type: 'line', data: ma10,
+        xAxisIndex: 0, yAxisIndex: 0,
+        smooth: true, symbol: 'none', silent: true,
+        lineStyle: { width: 1, color: '#4a9eff', opacity: 0.9 }
+      },
+      {
+        name: 'MA30', type: 'line', data: ma30,
+        xAxisIndex: 0, yAxisIndex: 0,
+        smooth: true, symbol: 'none', silent: true,
+        lineStyle: { width: 1, color: '#b07cff', opacity: 0.9 }
       },
       {
         name: '成交量',
@@ -1264,6 +1351,18 @@ function klineOption() {
         yAxisIndex: 1,
         barMaxWidth: 8,
         data: vols
+      },
+      {
+        name: 'VOL MA7', type: 'line', data: vma7,
+        xAxisIndex: 1, yAxisIndex: 1,
+        smooth: true, symbol: 'none', silent: true,
+        lineStyle: { width: 1, color: '#f0b90b', opacity: 0.9 }
+      },
+      {
+        name: 'VOL MA30', type: 'line', data: vma30,
+        xAxisIndex: 1, yAxisIndex: 1,
+        smooth: true, symbol: 'none', silent: true,
+        lineStyle: { width: 1, color: '#b07cff', opacity: 0.9 }
       }
     ]
   };
@@ -1810,6 +1909,8 @@ function loadStats() {
       el.change.textContent = pctText(chg);
       el.change.className = 'price-chg ' + toneClass(chg);
     }
+    fetchMcap();
+    fetch24hStats();
   });
 }
 
@@ -1836,6 +1937,45 @@ function readSymbol(addr) {
     s = s.replace(/[^\x20-\x7e]/g, '').trim();
     return s || null;
   }).catch(function () { return null; });
+}
+
+/* 流通市值：合约 totalSupply × 现价，supply 按交易对缓存 */
+var supplyCache = {};
+function fetchMcap() {
+  var pair = state.pair;
+  if (!pair || !pair.baseToken) { return; }
+  function draw() {
+    if (supplyCache[pair.key] && state.last != null) {
+      el.sMcap.innerHTML = fmtUsd(supplyCache[pair.key] * state.last);
+    }
+  }
+  if (supplyCache[pair.key] == null) {
+    rpcCall('eth_call', [{ to: pair.baseToken, data: '0x18160ddd' }, 'latest']).then(function (res) {
+      if (res && res.result) {
+        supplyCache[pair.key] = Number(BigInt(res.result)) / 1e18;
+        draw();
+      }
+    }).catch(function () {});
+  } else {
+    draw();
+  }
+}
+
+/* 24h 成交笔数与独立 taker 地址 */
+function fetch24hStats() {
+  var pair = state.pair;
+  if (!pair) { return; }
+  var dayAgo = Math.floor(Date.now() / 1000) - 86400;
+  var q = '{ matches(first: 1000, orderBy: timestamp, orderDirection: desc, where: {pairAddress: "' +
+    pair.ob + '", timestamp_gte: "' + dayAgo + '"}) { taker } }';
+  gql(q, 12000).then(function (data) {
+    var arr = (data && data.matches) || [];
+    var seen = {};
+    arr.forEach(function (m) { seen[m.taker] = 1; });
+    var capped = arr.length >= 1000;
+    el.sTxCnt.textContent = arr.length + (capped ? '+' : '');
+    el.sWallets.textContent = Object.keys(seen).length + (capped ? '+' : '');
+  }).catch(function () {});
 }
 
 function discoverPairs() {
