@@ -672,8 +672,8 @@ body::before {
   .brand { grid-column: 1 / 2; }
   .status { grid-column: 2 / 3; justify-self: end; }
   .pairs { grid-column: 1 / -1; }
-  .price-block { grid-column: 1 / 2; }
-  .top-stats { display: grid; grid-template-columns: auto auto; gap: 2px 10px; grid-column: 2 / 3; align-content: center; justify-content: end; }
+  .price-block { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+  .top-stats { display: grid; grid-template-columns: auto auto; gap: 2px 8px; align-content: center; justify-content: end; }
   .top-stats > div { display: contents; }
   .price-last { font-size: 26px; }
   .tape-bar { grid-template-columns: auto 1fr; gap: 8px; }
