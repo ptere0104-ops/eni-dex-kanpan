@@ -161,8 +161,8 @@ body::before {
   font-family: var(--mono);
   line-height: 1.3;
 }
-.top-stats .k { color: var(--muted); font-size: 10px; }
-.top-stats .v { color: var(--text); font-weight: 500; font-size: 12px; margin-left: 0; }
+.top-stats .k { color: var(--muted); font-size: 10px; text-align: left; }
+.top-stats .v { color: var(--text); font-weight: 500; font-size: 12px; margin-left: 0; text-align: right; }
 .status {
   display: flex;
   align-items: center;
@@ -672,9 +672,9 @@ body::before {
   .brand { grid-column: 1 / 2; }
   .status { grid-column: 2 / 3; justify-self: end; }
   .pairs { grid-column: 1 / -1; }
-  .price-block { grid-column: 1 / -1; }
-  .top-stats { display: flex; grid-column: 1 / -1; justify-content: space-between; gap: 8px; border-top: 1px solid var(--line); padding-top: 6px; margin-top: 2px; }
-  .top-stats > div { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .price-block { grid-column: 1 / 2; }
+  .top-stats { display: grid; grid-template-columns: auto auto; gap: 2px 10px; grid-column: 2 / 3; align-content: center; justify-content: end; }
+  .top-stats > div { display: contents; }
   .price-last { font-size: 26px; }
   .tape-bar { grid-template-columns: auto 1fr; gap: 8px; }
   .tape-legend { display: none; }
