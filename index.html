@@ -121,6 +121,7 @@ body::before {
   background: #0a1a17;
 }
 .price-block { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
+.price-left { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
 .price-line { display: flex; align-items: baseline; gap: 8px; }
 .price-last {
   font-family: var(--mono);
@@ -154,6 +155,14 @@ body::before {
   color: var(--dim);
   letter-spacing: .08em;
 }
+/* 手机端顶栏右侧紧凑统计：桌面端隐藏 */
+.top-stats { display: none; }
+.top-stats {
+  font-family: var(--mono);
+  line-height: 1.3;
+}
+.top-stats .k { color: var(--muted); font-size: 10px; }
+.top-stats .v { color: var(--text); font-weight: 500; font-size: 12px; margin-left: 0; }
 .status {
   display: flex;
   align-items: center;
@@ -664,6 +673,8 @@ body::before {
   .status { grid-column: 2 / 3; justify-self: end; }
   .pairs { grid-column: 1 / -1; }
   .price-block { grid-column: 1 / -1; }
+  .top-stats { display: flex; grid-column: 1 / -1; justify-content: space-between; gap: 8px; border-top: 1px solid var(--line); padding-top: 6px; margin-top: 2px; }
+  .top-stats > div { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
   .price-last { font-size: 26px; }
   .tape-bar { grid-template-columns: auto 1fr; gap: 8px; }
   .tape-legend { display: none; }
@@ -699,11 +710,18 @@ body::before {
     </div>
     <div class="pairs" id="pairs"></div>
     <div class="price-block">
-      <div class="price-line">
-        <span class="price-last" id="lastPrice">—</span>
-        <span class="price-tag">USDT</span>
+      <div class="price-left">
+        <div class="price-line">
+          <span class="price-last" id="lastPrice">—</span>
+          <span class="price-tag">USDT</span>
+        </div>
+        <span class="price-chg flat" id="changePct">—</span>
       </div>
-      <span class="price-chg flat" id="changePct">—</span>
+      <div class="top-stats">
+        <div><span class="k">24h 成交额</span><span class="v" id="msQuote">—</span></div>
+        <div><span class="k">24h 钱包数</span><span class="v" id="msWallets">—</span></div>
+        <div><span class="k">24h 交易数</span><span class="v" id="msTxCnt">—</span></div>
+      </div>
     </div>
     <div class="status">
       <i class="dot wait" id="statusDot"></i>
@@ -1110,6 +1128,9 @@ var el = {
   sMcap: document.getElementById('sMcap'),
   sTxCnt: document.getElementById('sTxCnt'),
   sWallets: document.getElementById('sWallets'),
+  msQuote: document.getElementById('msQuote'),
+  msWallets: document.getElementById('msWallets'),
+  msTxCnt: document.getElementById('msTxCnt'),
   flowBuy: document.getElementById('flowBuy'),
   flowSell: document.getElementById('flowSell'),
   flowNet: document.getElementById('flowNet'),
@@ -1920,6 +1941,7 @@ function loadStats() {
     el.sLow.textContent = fmtPrice(lo);
     el.sVol.innerHTML = fmtQty(vol) + '<span class="u">' + pair.base + '</span>';
     el.sQuote.innerHTML = fmtUsd(quote) + '<span class="u">USDT</span>';
+    el.msQuote.textContent = fmtUsd(quote);
     el.sOpen.textContent = fmtPrice(state.open24);
     if (state.last != null && state.open24) {
       var chg = (state.last - state.open24) / state.open24 * 100;
@@ -1993,6 +2015,8 @@ function fetch24hStats() {
     var capped = arr.length >= 1000;
     el.sTxCnt.textContent = arr.length + (capped ? '+' : '');
     el.sWallets.textContent = Object.keys(seen).length + (capped ? '+' : '');
+    el.msTxCnt.textContent = arr.length + (capped ? '+' : '');
+    el.msWallets.textContent = Object.keys(seen).length + (capped ? '+' : '');
   }).catch(function () {});
 }
 
