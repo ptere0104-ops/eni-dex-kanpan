@@ -1,0 +1,2203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ENI 链上终端 V0.2 · 实时看盘</title>
+<meta name="theme-color" content="#070a0c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ENI DEX">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="https://miaoda.feishu.cn/fonts/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js" integrity="sha384-pPi0zxBAoDu6+JXW/C68UZLvBUUtU+7zonhif43rqj7pxsGyqyqzcian2Rj37Rss" crossorigin="anonymous"></script>
+<style>
+:root {
+  --bg: #070a0c;
+  --panel: #0d1216;
+  --panel2: #111820;
+  --line: #1a242c;
+  --line-soft: #141c23;
+  --text: #e4ecf2;
+  --muted: #74838f;
+  --dim: #4b5a66;
+  --up: #2ac08a;
+  --down: #ef5350;
+  --accent: #00d6b2;
+  --warn: #f2b544;
+  --mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Noto Sans SC', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, #ffffff0a 1px, transparent 1px),
+    linear-gradient(to bottom, #ffffff0a 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+  z-index: 0;
+}
+.wrap {
+  position: relative;
+  z-index: 1;
+  max-width: 1680px;
+  margin: 0 auto;
+  padding: 12px 16px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+/* ===== 顶栏 ===== */
+.topbar {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: 20px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  white-space: nowrap;
+}
+.brand-mark {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  color: var(--accent);
+}
+.brand-sub {
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: .06em;
+}
+.brand-v {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--warn);
+  border: 1px solid #3a3020;
+  padding: 0 5px;
+  border-radius: 3px;
+  line-height: 16px;
+}
+.pairs { display: flex; gap: 4px; }
+.pair-btn {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color .12s, border-color .12s, background .12s;
+}
+.pair-btn:hover { color: var(--text); border-color: #2a3843; }
+.pair-btn[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: #17564c;
+  background: #0a1a17;
+}
+.price-block { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.price-last {
+  font-family: var(--mono);
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -.02em;
+  line-height: 1;
+}
+.price-chg {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.price-chg.up { color: var(--up); background: #0f2a22; }
+.price-chg.down { color: var(--down); background: #2a1314; }
+.price-chg.flat { color: var(--muted); background: #161d24; }
+.price-tag {
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: .08em;
+}
+.status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--up);
+  box-shadow: 0 0 0 3px #0d2a20;
+}
+.dot.off { background: var(--down); box-shadow: 0 0 0 3px #2a1414; }
+.dot.wait { background: var(--warn); box-shadow: 0 0 0 3px #2a2210; }
+
+/* ===== 成交纸带（签名元素） ===== */
+.tape-bar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 14px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.tape-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: .12em;
+  white-space: nowrap;
+}
+.tape {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 34px;
+  overflow: hidden;
+}
+.tape i {
+  flex: 1 1 0;
+  min-width: 2px;
+  border-radius: 1px 1px 0 0;
+  opacity: .85;
+  transition: height .18s ease-out;
+}
+.tape i.now { outline: 1px solid var(--warn); outline-offset: 1px; opacity: 1; }
+.tape-empty {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  align-self: center;
+}
+.tape-legend {
+  display: flex;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  white-space: nowrap;
+}
+.tape-legend b { font-weight: 500; }
+.tape-legend .u { color: var(--up); }
+.tape-legend .d { color: var(--down); }
+
+/* ===== 主区 ===== */
+.grid-main {
+  display: grid;
+  grid-template-columns: 1.62fr 1fr;
+  gap: 10px;
+  min-height: 0;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  flex-wrap: wrap;
+}
+.panel-title {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: .04em;
+}
+.panel-title small {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  font-weight: 400;
+  letter-spacing: .02em;
+  margin-left: 6px;
+}
+.tf-group { display: flex; gap: 2px; }
+.tf-btn {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 7px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: color .12s, background .12s;
+}
+.tf-btn:hover { color: var(--text); }
+.tf-btn[aria-pressed="true"] { color: var(--accent); background: #0d211d; }
+.chart-panel { min-height: 600px; }
+.chart-wrap { position: relative; flex: 1; display: flex; min-height: 0; padding: 4px 4px 6px; }
+#kline { width: 100%; height: 100%; min-height: 392px; }
+.chart-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 10px 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+}
+
+/* ===== 盘口 ===== */
+.book-head {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1fr;
+  gap: 6px;
+  padding: 7px 12px 5px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+}
+.book-head span:first-child { text-align: left; }
+.book-head span:nth-child(2) { text-align: right; }
+.book-head span:last-child { text-align: right; }
+.book-rows { padding: 0 4px; }
+.book-rows.asks { padding-bottom: 2px; }
+.book-rows.bids { padding-top: 2px; }
+.book-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1fr;
+  gap: 6px;
+  padding: 2px 8px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 17px;
+}
+.book-row .bg {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  right: 4px;
+  z-index: 0;
+  pointer-events: none;
+}
+.book-row.ask .bg { background: #ef53501f; }
+.book-row.bid .bg { background: #2ac08a1f; }
+.book-row > span { position: relative; z-index: 1; }
+.book-row .p { text-align: left; }
+.book-row.ask .p { color: var(--down); }
+.book-row.bid .p { color: var(--up); }
+.book-row .q { text-align: right; color: var(--text); }
+.book-row .t { text-align: right; color: var(--muted); }
+.book-mid {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  margin: 2px 4px;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+.book-mid .last {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+}
+.book-mid .last.up { color: var(--up); }
+.book-mid .last.down { color: var(--down); }
+.book-mid .spread {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  text-align: center;
+  white-space: nowrap;
+}
+.book-mid .tag {
+  font-size: 10px;
+  color: var(--dim);
+  text-align: right;
+  font-family: var(--mono);
+}
+.pressure {
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--line-soft);
+  margin-top: auto;
+}
+.pressure-head {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 10px;
+  margin-bottom: 5px;
+}
+.pressure-head .b { color: var(--up); }
+.pressure-head .s { color: var(--down); }
+.pressure-track {
+  display: flex;
+  height: 5px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: #161d24;
+}
+.pressure-track i { display: block; height: 100%; transition: width .3s; }
+.pressure-track .bid { background: var(--up); }
+.pressure-track .ask { background: var(--down); }
+.pressure-note {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--dim);
+  line-height: 1.5;
+}
+
+/* ===== 下区 ===== */
+.grid-bottom {
+  display: grid;
+  grid-template-columns: 1.62fr 1fr;
+  gap: 10px;
+  align-items: start;
+}
+.filters { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.seg {
+  display: flex;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px;
+}
+.seg button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--dim);
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.seg button[aria-pressed="true"] { color: var(--text); background: #1a242c; }
+.select, .num-input {
+  appearance: none;
+  background: #0b1116;
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 7px;
+  border-radius: 4px;
+  outline: none;
+}
+.select:focus-visible, .num-input:focus-visible, button:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px #00d6b233;
+}
+.ghost-btn {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color .12s, border-color .12s;
+}
+.ghost-btn:hover { color: var(--text); border-color: #2a3843; }
+.trade-head {
+  display: grid;
+  grid-template-columns: 74px 42px 1fr 1fr 1fr 96px;
+  gap: 8px;
+  padding: 7px 14px 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  border-bottom: 1px solid var(--line-soft);
+}
+.trade-head span:nth-child(n+3) { text-align: right; }
+.trade-head span:last-child { text-align: right; }
+.trade-list { max-height: 336px; overflow-y: auto; overflow-x: auto; }
+.trade-row {
+  display: grid;
+  grid-template-columns: 74px 42px 1fr 1fr 1fr 96px;
+  gap: 8px;
+  padding: 3px 14px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  border-left: 2px solid transparent;
+  position: relative;
+}
+.trade-row > span:nth-child(n+3) { text-align: right; }
+.trade-row > span:last-child { text-align: right; }
+.trade-row:hover { background: #ffffff08; }
+.trade-row.whale { border-left-color: var(--warn); background: #f2b5440d; }
+.trade-row .side.buy { color: var(--up); }
+.trade-row .side.sell { color: var(--down); }
+.trade-row .px.buy { color: var(--up); }
+.trade-row .px.sell { color: var(--down); }
+.trade-row .addr { color: var(--dim); text-decoration: none; }
+.trade-row .addr:hover { color: var(--accent); }
+.trade-empty {
+  padding: 26px 14px;
+  text-align: center;
+  color: var(--dim);
+  font-size: 12px;
+}
+/* 侧栏 ===== */
+.side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--line-soft);
+}
+.summary-cell {
+  background: var(--panel);
+  padding: 9px 12px;
+}
+.summary-cell .k {
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: .04em;
+  margin-bottom: 3px;
+}
+.summary-cell .v {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 500;
+}
+.summary-cell .v.up { color: var(--up); }
+.summary-cell .v.down { color: var(--down); }
+.summary-cell .u { font-size: 10px; color: var(--dim); font-family: var(--mono); margin-left: 3px; }
+.flow-strip {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  border-top: 1px solid var(--line-soft);
+}
+.flow-cell { padding: 8px 12px; }
+.flow-cell + .flow-cell { border-left: 1px solid var(--line-soft); }
+.flow-cell .k { font-size: 10px; color: var(--dim); }
+.flow-cell .v { font-family: var(--mono); font-size: 12.5px; margin-top: 2px; }
+.flow-cell .v.up { color: var(--up); }
+.flow-cell .v.down { color: var(--down); }
+.traders { padding: 4px 0 8px; }
+.trader-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.trader-row .a { color: var(--muted); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trader-row .a:hover { color: var(--accent); }
+.trader-row .n { color: var(--dim); font-size: 10px; }
+.trader-row .amt { color: var(--text); text-align: right; min-width: 62px; }
+.alerts { padding: 8px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.alert-line {
+  display: grid;
+  grid-template-columns: 66px 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+.alert-line .lab { font-size: 11px; color: var(--muted); }
+.alert-line .num-input { width: 100%; }
+.alert-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.switch {
+  appearance: none;
+  width: 30px;
+  height: 16px;
+  border-radius: 9px;
+  background: #1a242c;
+  border: 1px solid #25313b;
+  position: relative;
+  cursor: pointer;
+  transition: background .15s;
+}
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform .15s, background .15s;
+}
+.switch[aria-checked="true"] { background: #0d3a31; border-color: #17614f; }
+.switch[aria-checked="true"]::after { transform: translateX(14px); background: var(--accent); }
+.alert-log {
+  border-top: 1px solid var(--line-soft);
+  margin-top: 2px;
+  padding-top: 6px;
+  max-height: 96px;
+  overflow-y: auto;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.alert-log .t { color: var(--dim); margin-right: 6px; }
+.alert-log .none { color: var(--dim); }
+.foot {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 2px;
+}
+.toast-wrap {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+.toast {
+  background: #121a21;
+  border: 1px solid #2a3843;
+  border-left: 3px solid var(--accent);
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  max-width: 320px;
+  animation: toast-in .2s ease-out;
+}
+.toast.warn { border-left-color: var(--warn); }
+.toast .tt { font-family: var(--mono); font-size: 10px; color: var(--dim); margin-bottom: 2px; }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* ===== 窄屏 ===== */
+@media (max-width: 1080px) {
+  .grid-main, .grid-bottom { grid-template-columns: 1fr; }
+  .book-panel { max-height: none; }
+}
+@media (max-width: 760px) {
+  .wrap { padding: 10px 10px 18px; gap: 8px; }
+  .topbar {
+    grid-template-columns: 1fr auto;
+    gap: 10px 12px;
+    padding: 10px 12px;
+  }
+  .brand { grid-column: 1 / 2; }
+  .status { grid-column: 2 / 3; justify-self: end; }
+  .pairs { grid-column: 1 / -1; }
+  .price-block { grid-column: 1 / -1; }
+  .price-last { font-size: 26px; }
+  .tape-bar { grid-template-columns: auto 1fr; gap: 8px; }
+  .tape-legend { display: none; }
+  .chart-panel { min-height: 0; }
+  #kline { height: 300px; min-height: 300px; }
+  .trade-head, .trade-row { grid-template-columns: 66px 38px 1fr 1fr 1fr; }
+  .trade-head span:last-child, .trade-row > *:last-child { display: none; }
+  .summary-grid { grid-template-columns: 1fr 1fr; }
+  .alert-line { grid-template-columns: 62px 1fr auto; }
+}
+
+/* ===== 手机竖屏 ===== */
+@media (max-width: 520px) {
+  .wrap { padding: 8px 8px 16px; }
+  .topbar { padding: 9px 10px; }
+  .brand-sub { display: none; }
+  .price-last { font-size: 28px; }
+  #kline { height: 272px; min-height: 272px; }
+  .trade-head, .trade-row { grid-template-columns: 58px 30px 1fr 1fr 1fr; gap: 6px; }
+  .summary-grid { grid-template-columns: 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ===== 顶栏：交易对 / 最新价 / 连接状态 ===== -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">ENI DEX</span>
+      <span class="brand-sub">链上订单簿终端</span>
+      <span class="brand-v">V0.2</span>
+    </div>
+    <div class="pairs" id="pairs"></div>
+    <div class="price-block">
+      <span class="price-last" id="lastPrice">—</span>
+      <span class="price-chg flat" id="changePct">—</span>
+      <span class="price-tag">USDT</span>
+    </div>
+    <div class="status">
+      <i class="dot wait" id="statusDot"></i>
+      <span id="statusText">连接中</span>
+    </div>
+  </header>
+
+  <!-- ===== 成交纸带：每笔成交一根竖条，高度表示金额，颜色表示方向 ===== -->
+  <section class="tape-bar" aria-label="成交纸带">
+    <span class="tape-label">TAPE · 逐笔成交</span>
+    <div class="tape" id="tape"><span class="tape-empty">等待成交数据</span></div>
+    <div class="tape-legend">
+      <span><b class="u">买</b> 向上</span>
+      <span><b class="d">卖</b> 向下</span>
+      <span>高度 = 金额</span>
+    </div>
+  </section>
+
+  <!-- ===== 主区：K 线 + 盘口 ===== -->
+  <main class="grid-main">
+    <section class="panel chart-panel">
+      <div class="panel-head">
+        <div class="panel-title">价格走势 <small id="chartPairLabel">ENI/USDT</small></div>
+        <div class="tf-group" id="tfGroup"></div>
+      </div>
+      <div class="chart-wrap">
+        <div id="kline"></div>
+      </div>
+      <div class="chart-foot">
+        <span id="chartFoot">—</span>
+        <span>滚动缩放 · 悬停查看单根</span>
+      </div>
+    </section>
+
+    <section class="panel book-panel">
+      <div class="panel-head">
+        <div class="panel-title">订单簿 <small id="bookDepthLabel">链上挂单 · 12 档</small></div>
+        <span class="panel-title" style="color:var(--dim);font-family:var(--mono);font-size:10px" id="bookDepthNote">—</span>
+      </div>
+      <div class="book-head"><span>价格</span><span>数量</span><span>金额</span></div>
+      <div class="book-rows asks" id="asks"></div>
+      <div class="book-mid">
+        <span class="last" id="bookLast">—</span>
+        <span class="spread" id="bookSpread">价差 —</span>
+        <span class="tag">USDT</span>
+      </div>
+      <div class="book-rows bids" id="bids"></div>
+      <div class="pressure">
+        <div class="pressure-head">
+          <span class="b">买盘 <b id="bidPct">—</b></span>
+          <span class="s">卖盘 <b id="askPct">—</b></span>
+        </div>
+        <div class="pressure-track"><i class="bid" id="bidBar" style="width:50%"></i><i class="ask" id="askBar" style="width:50%"></i></div>
+        <div class="pressure-note" id="pressureNote">按现价上下 35% 内挂单金额统计</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===== 下区：成交流 + 侧栏 ===== -->
+  <section class="grid-bottom">
+    <section class="panel trades-panel">
+      <div class="panel-head">
+        <div class="panel-title">实时成交 <small id="tradeCount">0 笔</small></div>
+        <div class="filters">
+          <div class="seg" id="tradeFilter">
+            <button type="button" data-f="all" aria-pressed="true">全部</button>
+            <button type="button" data-f="buy" aria-pressed="false">主动买</button>
+            <button type="button" data-f="sell" aria-pressed="false">主动卖</button>
+            <button type="button" data-f="whale" aria-pressed="false">大单</button>
+          </div>
+          <select class="select" id="whaleSelect" aria-label="大单阈值">
+            <option value="50">大单 ≥ 50</option>
+            <option value="200" selected>大单 ≥ 200</option>
+            <option value="500">大单 ≥ 500</option>
+            <option value="1000">大单 ≥ 1000</option>
+            <option value="2000">大单 ≥ 2000</option>
+          </select>
+          <button type="button" class="ghost-btn" id="exportBtn">导出 CSV</button>
+        </div>
+      </div>
+      <div class="trade-head">
+        <span>时间</span><span>方向</span><span>价格</span><span>数量</span><span>金额</span><span>交易者</span>
+      </div>
+      <div class="trade-list" id="tradeList"><div class="trade-empty">正在拉取链上成交</div></div>
+    </section>
+
+    <aside class="side">
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title">24 小时概览 <small>官方子图 1H K 线汇总</small></div>
+        </div>
+        <div class="summary-grid">
+          <div class="summary-cell"><div class="k">24H 最高</div><div class="v" id="sHigh">—</div></div>
+          <div class="summary-cell"><div class="k">24H 最低</div><div class="v" id="sLow">—</div></div>
+          <div class="summary-cell"><div class="k">24H 成交量</div><div class="v" id="sVol">—<span class="u" id="sVolUnit">ENI</span></div></div>
+          <div class="summary-cell"><div class="k">24H 成交额</div><div class="v" id="sQuote">—<span class="u">USDT</span></div></div>
+          <div class="summary-cell"><div class="k">24H 开盘</div><div class="v" id="sOpen">—</div></div>
+          <div class="summary-cell"><div class="k">当前价差</div><div class="v" id="sSpread">—</div></div>
+        </div>
+        <div class="flow-strip">
+          <div class="flow-cell"><div class="k">窗口主动买</div><div class="v up" id="flowBuy">—</div></div>
+          <div class="flow-cell"><div class="k">窗口主动卖</div><div class="v down" id="flowSell">—</div></div>
+          <div class="flow-cell"><div class="k">净额</div><div class="v" id="flowNet">—</div></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title">活跃交易者 <small id="traderWindow">窗口内前 6</small></div>
+        </div>
+        <div class="traders" id="traders"><div class="trade-empty">暂无数据</div></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title">告警 <small>本地保存</small></div>
+          <div class="alert-toggle">
+            <span>声音</span>
+            <button type="button" class="switch" id="soundSwitch" aria-checked="false" aria-label="声音提醒"></button>
+          </div>
+        </div>
+        <div class="alerts">
+          <div class="alert-line">
+            <span class="lab">价格上破</span>
+            <input class="num-input" id="alertAbove" type="number" step="0.01" placeholder="例如 28.50" aria-label="价格上破阈值">
+            <button type="button" class="ghost-btn" id="armAbove">启用</button>
+          </div>
+          <div class="alert-line">
+            <span class="lab">价格下破</span>
+            <input class="num-input" id="alertBelow" type="number" step="0.01" placeholder="例如 25.00" aria-label="价格下破阈值">
+            <button type="button" class="ghost-btn" id="armBelow">启用</button>
+          </div>
+          <div class="alert-line">
+            <span class="lab">盘口失衡</span>
+            <select class="select" id="imbalanceSelect" aria-label="盘口失衡阈值">
+              <option value="0">关闭</option>
+              <option value="70">单边 ≥ 70%</option>
+              <option value="75">单边 ≥ 75%</option>
+              <option value="80">单边 ≥ 80%</option>
+            </select>
+            <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">买卖金额</span>
+          </div>
+          <div class="alert-toggle">
+            <span>系统通知</span>
+            <button type="button" class="switch" id="notifySwitch" aria-checked="false" aria-label="系统通知"></button>
+            <span style="font-family:var(--mono);font-size:10px;color:var(--dim)" id="notifyHint">需授权</span>
+          </div>
+          <div class="alert-log" id="alertLog"><span class="none">暂无告警记录</span></div>
+        </div>
+      </section>
+    </aside>
+  </section>
+
+  <div class="foot">
+    <span>数据源 · EniDex 官方子图 graph.eni.top / RPC rpc.eni.top · 成交与挂单为链上订单簿原始记录，3 秒刷新；K 线由子图聚合，最新一根通常滞后 1-5 分钟</span>
+    <span id="footClock">—</span>
+  </div>
+</div>
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+/* =========================================================================
+ * ENI 链上终端 V0.2
+ * 数据：EniDex 官方子图（orderbook-dex）+ ENI RPC
+ * 结构：配置 → 工具 → 状态 → 图表 → 盘口 → 成交 → 概览 → 告警 → 调度
+ * ========================================================================= */
+
+/* ---------- 1. 配置 ---------- */
+var GRAPH = 'https://graph.eni.top/subgraphs/name/orderbook-dex';
+var RPC = 'https://rpc.eni.top/';
+var SCAN = 'https://scan.eni.top';
+var W = 1e18;
+var STORE_KEY = 'eni-terminal-v02';
+
+var PAIRS = [
+  {
+    key: 'eni-usdt',
+    label: 'ENI/USDT',
+    base: 'ENI',
+    quote: 'USDT',
+    baseToken: '0xe2496d9b0c29e703d19a1131e9ec62d36ef18d32',
+    quoteToken: '0xd739642150c3f93b41cec5b9ea77dd36442b2907',
+    ob: '0x6ada4a104bde43362e4caa47229870e8364175d0'
+  },
+  {
+    key: 'evbc-usdt',
+    label: 'EVBC/USDT',
+    base: 'EVBC',
+    quote: 'USDT',
+    baseToken: '0x70348b77227619d4908a0bf43e96a3caa438045f',
+    quoteToken: '0xd739642150c3f93b41cec5b9ea77dd36442b2907',
+    ob: '0xc7182f3e2e030cf83d627be9fa3bfdb6fd04ce04'
+  }
+];
+
+var INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d'];
+var STEP_SEC = { '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 };
+var KLINE_LIMIT = 220;
+var MAX_TRADES = 600;
+var POLL_FAST = 3000;
+var PALETTE = {
+  up: '#2ac08a',
+  down: '#ef5350',
+  accent: '#00d6b2',
+  warn: '#f2b544',
+  grid: '#1a242c',
+  text: '#e4ecf2',
+  muted: '#74838f'
+};
+
+/* ---------- 2. 工具函数 ---------- */
+var timeFmt = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+});
+var dateFmt = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+});
+var clockFmt = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+});
+
+function num(v) {
+  var n = Number(v);
+  return isFinite(n) ? n : 0;
+}
+function wei(v) {
+  return num(v) / W;
+}
+function shortAddr(a) {
+  if (!a || a.length < 12) { return a || '—'; }
+  return a.slice(0, 6) + '…' + a.slice(-4);
+}
+function fmtPrice(n) {
+  if (!isFinite(n) || n === 0) { return '—'; }
+  if (Math.abs(n) >= 1000) {
+    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  if (Math.abs(n) >= 1) { return n.toFixed(2); }
+  if (Math.abs(n) >= 0.01) { return n.toFixed(4); }
+  return n.toFixed(6);
+}
+function fmtQty(n) {
+  if (!isFinite(n)) { return '—'; }
+  if (Math.abs(n) >= 1000) {
+    return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  }
+  if (Math.abs(n) >= 1) { return n.toFixed(3); }
+  return n.toFixed(4);
+}
+function fmtUsd(n) {
+  if (!isFinite(n)) { return '—'; }
+  var a = Math.abs(n);
+  if (a >= 1e6) { return (n / 1e6).toFixed(2) + 'M'; }
+  if (a >= 1e4) { return (n / 1e3).toFixed(1) + 'K'; }
+  if (a >= 100) { return n.toFixed(0); }
+  return n.toFixed(2);
+}
+function fmtVolAxis(n) {
+  if (n >= 1e6) { return (n / 1e6).toFixed(1) + 'M'; }
+  if (n >= 1e3) { return (n / 1e3).toFixed(1) + 'K'; }
+  return String(Math.round(n));
+}
+function pctText(n) {
+  return (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+}
+function toneClass(n) {
+  if (n > 0) { return 'up'; }
+  if (n < 0) { return 'down'; }
+  return 'flat';
+}
+
+/* 子图请求：带超时与错误归一化 */
+function gql(query, timeoutMs) {
+  var ctrl = new AbortController();
+  var timer = setTimeout(function () { ctrl.abort(); }, timeoutMs || 9000);
+  return fetch(GRAPH, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: query }),
+    signal: ctrl.signal
+  }).then(function (res) {
+    if (!res.ok) { throw new Error('HTTP ' + res.status); }
+    return res.json();
+  }).then(function (json) {
+    if (json.errors && json.errors.length) {
+      throw new Error(json.errors[0].message || '子图返回错误');
+    }
+    return json.data || {};
+  }).finally(function () { clearTimeout(timer); });
+}
+
+/* localStorage 读写（隐私模式下静默降级） */
+function readStore() {
+  try {
+    var raw = localStorage.getItem(STORE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+function writeStore(patch) {
+  try {
+    var cur = readStore() || {};
+    var next = Object.assign(cur, patch);
+    localStorage.setItem(STORE_KEY, JSON.stringify(next));
+  } catch (e) { /* 存储不可用时忽略 */ }
+}
+
+/* ---------- 3. 状态 ---------- */
+var state = {
+  pair: PAIRS[0],
+  interval: '1m',
+  last: null,
+  prevLast: null,
+  open24: null,
+  high24: null,
+  low24: null,
+  vol24: null,
+  quote24: null,
+  klines: [],
+  matches: [],
+  bids: [],
+  asks: [],
+  bestBid: null,
+  bestAsk: null,
+  filter: 'all',
+  whaleUsd: 200,
+  sound: false,
+  notify: false,
+  alerts: { above: null, below: null, imbalance: 0, whale: null },
+  alertLog: [],
+  armed: { above: false, below: false, imbalance: false },
+  latency: null,
+  online: false,
+  lastFast: 0,
+  lastKline: 0,
+  chartReady: false,
+  primed: false,
+  lastStore: 0,
+  imbalanceSide: null,
+  imbalanceCool: 0
+};
+
+/* 恢复本地设置 */
+(function restore() {
+  var s = readStore();
+  if (!s) { return; }
+  if (s.pairKey) {
+    var saved = PAIRS.filter(function (p) { return p.key === s.pairKey; })[0];
+    if (saved) { state.pair = saved; }
+  }
+  if (s.interval && INTERVALS.indexOf(s.interval) >= 0) { state.interval = s.interval; }
+  if (s.whaleUsd) { state.whaleUsd = Number(s.whaleUsd); }
+  if (s.sound) { state.sound = true; }
+  if (s.notify) { state.notify = true; }
+  if (s.alerts) { state.alerts = Object.assign(state.alerts, s.alerts); }
+  if (s.armed) { state.armed = Object.assign(state.armed, s.armed); }
+  if (s.trades && s.trades.pairKey === state.pair.key && s.trades.rows) {
+    state.matches = s.trades.rows.slice(0, MAX_TRADES);
+  }
+})();
+
+/* ---------- 4. DOM 引用 ---------- */
+var el = {
+  pairs: document.getElementById('pairs'),
+  last: document.getElementById('lastPrice'),
+  change: document.getElementById('changePct'),
+  dot: document.getElementById('statusDot'),
+  statusText: document.getElementById('statusText'),
+  tape: document.getElementById('tape'),
+  tf: document.getElementById('tfGroup'),
+  chartPair: document.getElementById('chartPairLabel'),
+  chartFoot: document.getElementById('chartFoot'),
+  kline: document.getElementById('kline'),
+  asks: document.getElementById('asks'),
+  bids: document.getElementById('bids'),
+  bookLast: document.getElementById('bookLast'),
+  bookSpread: document.getElementById('bookSpread'),
+  bookDepthNote: document.getElementById('bookDepthNote'),
+  bookDepthLabel: document.getElementById('bookDepthLabel'),
+  bidPct: document.getElementById('bidPct'),
+  askPct: document.getElementById('askPct'),
+  bidBar: document.getElementById('bidBar'),
+  askBar: document.getElementById('askBar'),
+  pressureNote: document.getElementById('pressureNote'),
+  tradeList: document.getElementById('tradeList'),
+  tradeCount: document.getElementById('tradeCount'),
+  filter: document.getElementById('tradeFilter'),
+  whaleSelect: document.getElementById('whaleSelect'),
+  exportBtn: document.getElementById('exportBtn'),
+  sHigh: document.getElementById('sHigh'),
+  sLow: document.getElementById('sLow'),
+  sVol: document.getElementById('sVol'),
+  sVolUnit: document.getElementById('sVolUnit'),
+  sQuote: document.getElementById('sQuote'),
+  sOpen: document.getElementById('sOpen'),
+  sSpread: document.getElementById('sSpread'),
+  flowBuy: document.getElementById('flowBuy'),
+  flowSell: document.getElementById('flowSell'),
+  flowNet: document.getElementById('flowNet'),
+  traders: document.getElementById('traders'),
+  traderWindow: document.getElementById('traderWindow'),
+  alertAbove: document.getElementById('alertAbove'),
+  alertBelow: document.getElementById('alertBelow'),
+  armAbove: document.getElementById('armAbove'),
+  armBelow: document.getElementById('armBelow'),
+  imbalanceSelect: document.getElementById('imbalanceSelect'),
+  soundSwitch: document.getElementById('soundSwitch'),
+  notifySwitch: document.getElementById('notifySwitch'),
+  notifyHint: document.getElementById('notifyHint'),
+  alertLog: document.getElementById('alertLog'),
+  footClock: document.getElementById('footClock'),
+  toastWrap: document.getElementById('toastWrap')
+};
+
+/* ---------- 5. 图表 ---------- */
+var chart = null;
+
+function initChart() {
+  chart = echarts.init(el.kline, null, { renderer: 'canvas' });
+  state.chartReady = true;
+  /* 记住用户手动缩放的位置，刷新时不跳回默认区间 */
+  chart.on('datazoom', function (e) {
+    var b = (e.batch && e.batch[0]) ? e.batch[0] : e;
+    if (b && b.start != null && b.end != null) {
+      state.zoom = { start: b.start, end: b.end };
+    }
+  });
+  new ResizeObserver(function () { if (chart) { chart.resize(); } }).observe(el.kline);
+}
+
+function klineOption() {
+  var rows = state.klines;
+  var times = rows.map(function (k) { return k.time; });
+  var ohlc = rows.map(function (k) {
+    if (k.empty) {
+      /* 无成交的周期：用中性灰平线表示，避免被误读成真实涨跌 */
+      return {
+        value: [k.o, k.c, k.l, k.h],
+        itemStyle: { color: '#2c3a45', color0: '#2c3a45', borderColor: '#2c3a45', borderColor0: '#2c3a45' }
+      };
+    }
+    return [k.o, k.c, k.l, k.h];
+  });
+  var vols = rows.map(function (k) {
+    return {
+      value: k.v,
+      itemStyle: { color: k.c >= k.o ? '#2ac08a55' : '#ef535055' }
+    };
+  });
+  var last = state.last;
+  /* 手机窄屏：右轴只留窄边，副图坐标轴标签隐藏，避免挤在图表上 */
+  var narrow = window.innerWidth < 520;
+
+  return {
+    animation: false,
+    backgroundColor: 'transparent',
+    textStyle: { fontFamily: "'JetBrains Mono','Noto Sans SC',monospace", color: PALETTE.muted },
+    grid: [
+      { left: narrow ? 16 : 6, right: narrow ? 46 : 62, top: 26, height: narrow ? '56%' : '54%' },
+      { left: narrow ? 16 : 6, right: narrow ? 46 : 62, top: narrow ? '74%' : '72%', height: narrow ? '14%' : '15%' }
+    ],
+    axisPointer: { link: [{ xAxisIndex: 'all' }], label: { backgroundColor: '#111820', borderColor: '#2a3843' } },
+    tooltip: {
+      trigger: 'axis',
+      confine: true,
+      axisPointer: { type: 'cross', crossStyle: { color: '#3a4a57' }, lineStyle: { color: '#3a4a57' } },
+      backgroundColor: '#111820',
+      borderColor: '#2a3843',
+      textStyle: { color: PALETTE.text, fontSize: 11, fontFamily: "'JetBrains Mono',monospace" },
+      formatter: function (params) {
+        var p = params[0];
+        if (!p) { return ''; }
+        var idx = p.dataIndex;
+        var k = rows[idx];
+        if (!k) { return ''; }
+        var chg = k.o ? ((k.c - k.o) / k.o * 100) : 0;
+        return [
+          '<div style="font-size:10px;color:#74838f;margin-bottom:4px">' + k.fullTime + ' · ' + state.interval + '</div>',
+          '<div>开 ' + fmtPrice(k.o) + '　高 ' + fmtPrice(k.h) + '</div>',
+          '<div>低 ' + fmtPrice(k.l) + '　收 ' + fmtPrice(k.c) + '</div>',
+          '<div style="margin-top:3px">涨跌 ' + pctText(chg) + '</div>',
+          '<div>量 ' + fmtQty(k.v) + ' ' + state.pair.base + '</div>',
+          '<div>额 ' + fmtUsd(k.q) + ' USDT</div>'
+        ].join('');
+      }
+    },
+    xAxis: [
+      {
+        type: 'category',
+        data: times,
+        boundaryGap: true,
+        axisLine: { lineStyle: { color: PALETTE.grid } },
+        axisTick: { show: false },
+        axisLabel: { show: false },
+        splitLine: { show: false },
+        min: 'dataMin',
+        max: 'dataMax'
+      },
+      {
+        type: 'category',
+        gridIndex: 1,
+        data: times,
+        boundaryGap: true,
+        axisLine: { lineStyle: { color: PALETTE.grid } },
+        axisTick: { show: false },
+        axisLabel: {
+          color: '#5c6b77',
+          fontSize: 10,
+          hideOverlap: true,
+          formatter: function (v) { return v; }
+        },
+        splitLine: { show: false },
+        min: 'dataMin',
+        max: 'dataMax'
+      }
+    ],
+    yAxis: [
+      {
+        scale: true,
+        position: 'right',
+        splitNumber: 6,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: {
+          color: '#5c6b77',
+          fontSize: narrow ? 9 : 10,
+          margin: narrow ? 4 : 8,
+          formatter: function (v) { return fmtPrice(v); }
+        },
+        splitLine: { lineStyle: { color: PALETTE.grid, type: 'solid' } },
+        axisPointer: { label: { show: true, formatter: function (p) { return fmtPrice(p.value); } } }
+      },
+      {
+        scale: true,
+        gridIndex: 1,
+        position: 'right',
+        splitNumber: 2,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: {
+          color: '#5c6b77',
+          fontSize: 10,
+          margin: 8,
+          formatter: function (v) { return fmtVolAxis(v); },
+          show: !narrow
+        },
+        splitLine: { show: false },
+        axisPointer: { label: { show: false } }
+      }
+    ],
+    dataZoom: [
+      {
+        type: 'inside',
+        xAxisIndex: [0, 1],
+        start: state.zoom ? state.zoom.start : 0,
+        end: state.zoom ? state.zoom.end : 100,
+        minValueSpan: 12
+      }
+    ],
+    series: [
+      {
+        name: '价格',
+        type: 'candlestick',
+        xAxisIndex: 0,
+        yAxisIndex: 0,
+        barMaxWidth: narrow ? 7 : 12,
+        itemStyle: {
+          color: PALETTE.up,
+          color0: PALETTE.down,
+          borderColor: PALETTE.up,
+          borderColor0: PALETTE.down,
+          borderWidth: 1
+        },
+        data: ohlc,
+        markLine: last ? {
+          silent: true,
+          symbol: 'none',
+          lineStyle: { color: PALETTE.warn, type: 'dashed', width: 1, opacity: 0.7 },
+          label: {
+            position: 'end',
+            color: PALETTE.warn,
+            fontSize: 10,
+            formatter: function () { return fmtPrice(last); }
+          },
+          data: [{ yAxis: last }]
+        } : null
+      },
+      {
+        name: '成交量',
+        type: 'bar',
+        xAxisIndex: 1,
+        yAxisIndex: 1,
+        barMaxWidth: 8,
+        data: vols
+      }
+    ]
+  };
+}
+
+function renderChart() {
+  if (!chart) { return; }
+  chart.setOption(klineOption(), { notMerge: true });
+  var first = state.klines[0];
+  var last = state.klines[state.klines.length - 1];
+  if (!first || !last) {
+    el.chartFoot.textContent = '暂无 K 线数据';
+    return;
+  }
+  var chg = first.o ? ((last.c - first.o) / first.o * 100) : 0;
+  el.chartFoot.textContent = '区间 ' + state.klines.length + ' 根 · ' + first.shortTime + ' → ' +
+    last.shortTime + ' · 涨跌 ' + pctText(chg) + ' · 灰线=该周期无成交';
+}
+
+/* ---------- 6. 盘口 ---------- */
+function normalizeOrders(rows, isBid) {
+  var map = {};
+  rows.forEach(function (r) {
+    var price = wei(r.price);
+    var base = isBid ? wei(r.amountOut) : wei(r.amountIn);
+    var quote = isBid ? wei(r.amountIn) : wei(r.amountOut);
+    if (!(price > 0) || !(base > 0)) { return; }
+    var key = price.toFixed(8);
+    if (!map[key]) { map[key] = { price: price, base: 0, quote: 0 }; }
+    map[key].base += base;
+    map[key].quote += quote;
+  });
+  return Object.keys(map).map(function (k) { return map[k]; });
+}
+
+function filterNear(rows, last) {
+  if (!last) { return rows; }
+  return rows.filter(function (r) {
+    return Math.abs(r.price / last - 1) <= 0.35;
+  });
+}
+
+function renderBook() {
+  var last = state.last || 1;
+  /* 手机竖屏每侧只显示 8 档，避免盘口把首屏撑得太长 */
+  var depth = window.innerWidth < 520 ? 8 : 12;
+  if (el.bookDepthLabel) { el.bookDepthLabel.textContent = '链上挂单 · ' + depth + ' 档'; }
+  var asks = filterNear(state.asks, last).slice(0, depth);
+  var bids = filterNear(state.bids, last).slice(0, depth);
+
+  var maxAsk = 0;
+  var maxBid = 0;
+  asks.forEach(function (r) { maxAsk = Math.max(maxAsk, r.base); });
+  bids.forEach(function (r) { maxBid = Math.max(maxBid, r.base); });
+
+  function rowHtml(r, side, maxBase) {
+    var w = maxBase > 0 ? Math.max(4, Math.min(100, r.base / maxBase * 100)) : 4;
+    return '<div class="book-row ' + side + '">' +
+      '<i class="bg" style="width:' + w.toFixed(1) + '%"></i>' +
+      '<span class="p">' + fmtPrice(r.price) + '</span>' +
+      '<span class="q">' + fmtQty(r.base) + '</span>' +
+      '<span class="t">' + fmtUsd(r.quote) + '</span>' +
+      '</div>';
+  }
+
+  /* 卖盘：价格由高到低，最优价贴近中间 */
+  el.asks.innerHTML = asks.slice().reverse().map(function (r) { return rowHtml(r, 'ask', maxAsk); }).join('');
+  el.bids.innerHTML = bids.map(function (r) { return rowHtml(r, 'bid', maxBid); }).join('');
+
+  state.bestAsk = asks.length ? Math.min.apply(null, asks.map(function (r) { return r.price; })) : null;
+  state.bestBid = bids.length ? Math.max.apply(null, bids.map(function (r) { return r.price; })) : null;
+
+  if (state.last) {
+    el.bookLast.textContent = fmtPrice(state.last);
+    el.bookLast.className = 'last ' + toneClass((state.last - (state.open24 || state.last)));
+  }
+  if (state.bestAsk && state.bestBid) {
+    var spread = state.bestAsk - state.bestBid;
+    var bps = state.last ? (spread / state.last * 10000) : 0;
+    el.bookSpread.textContent = '价差 ' + fmtPrice(spread) + ' · ' + bps.toFixed(0) + ' bps';
+    el.sSpread.textContent = bps.toFixed(0) + ' bps';
+  } else {
+    el.bookSpread.textContent = '价差 —';
+    el.sSpread.textContent = '—';
+  }
+
+  /* 买卖压力：现价 ±35% 内的挂单金额 */
+  var allAsks = filterNear(state.asks, state.last);
+  var allBids = filterNear(state.bids, state.last);
+  var askUsd = allAsks.reduce(function (s, r) { return s + r.quote; }, 0);
+  var bidUsd = allBids.reduce(function (s, r) { return s + r.quote; }, 0);
+  var total = askUsd + bidUsd;
+  var bidPct = total > 0 ? bidUsd / total * 100 : 50;
+
+  el.bidPct.textContent = bidPct.toFixed(0) + '%';
+  el.askPct.textContent = (100 - bidPct).toFixed(0) + '%';
+  el.bidBar.style.width = bidPct.toFixed(1) + '%';
+  el.askBar.style.width = (100 - bidPct).toFixed(1) + '%';
+  el.bookDepthNote.textContent = '买 ' + fmtUsd(bidUsd) + ' / 卖 ' + fmtUsd(askUsd);
+  el.pressureNote.textContent = '按现价上下 35% 内挂单金额统计，共 ' +
+    (allBids.length + allAsks.length) + ' 档（原始挂单 ' + (state.bids.length + state.asks.length) + ' 档）';
+  state.bidShare = bidPct;
+}
+
+/* ---------- 7. 成交纸带与成交流 ---------- */
+function tradeUsd(m) {
+  return wei(m.amountOut);
+}
+function tradeQty(m) {
+  return wei(m.amountIn);
+}
+function isBuy(m) {
+  return Number(m.orderType) === 0;
+}
+
+function mergeMatches(rows) {
+  if (!rows || !rows.length) { return 0; }
+  var known = {};
+  state.matches.forEach(function (m) { known[m.id] = true; });
+  var added = 0;
+  rows.forEach(function (r) {
+    if (known[r.id]) { return; }
+    known[r.id] = true;
+    state.matches.push({
+      id: r.id,
+      ts: Number(r.timestamp) * 1000,
+      price: wei(r.price),
+      qty: tradeQty(r),
+      usd: tradeUsd(r),
+      buy: isBuy(r),
+      maker: r.taker || r.maker || '',
+      tx: String(r.id || '').split('-')[0]
+    });
+    added += 1;
+  });
+  state.matches.sort(function (a, b) { return b.ts - a.ts; });
+  if (state.matches.length > MAX_TRADES) {
+    state.matches = state.matches.slice(0, MAX_TRADES);
+  }
+  return added;
+}
+
+function renderTape() {
+  var rows = state.matches.slice(0, 64).slice().reverse();
+  if (!rows.length) {
+    el.tape.innerHTML = '<span class="tape-empty">等待成交数据</span>';
+    return;
+  }
+  var maxUsd = 1;
+  rows.forEach(function (m) { maxUsd = Math.max(maxUsd, m.usd); });
+  var html = rows.map(function (m, i) {
+    var h = Math.log10(m.usd + 1) / Math.log10(maxUsd + 1) * 100;
+    h = Math.max(6, Math.min(100, h));
+    var color = m.buy ? PALETTE.up : PALETTE.down;
+    var isLast = i === rows.length - 1;
+    return '<i style="height:' + h.toFixed(1) + '%;background:' + color + '"' +
+      (isLast ? ' class="now"' : '') + ' title="' + timeFmt.format(new Date(m.ts)) + ' · ' +
+      (m.buy ? '买' : '卖') + ' · ' + fmtUsd(m.usd) + ' USDT"></i>';
+  }).join('');
+  el.tape.innerHTML = html;
+}
+
+function filteredTrades() {
+  var rows = state.matches;
+  if (state.filter === 'buy') { rows = rows.filter(function (m) { return m.buy; }); }
+  if (state.filter === 'sell') { rows = rows.filter(function (m) { return !m.buy; }); }
+  if (state.filter === 'whale') {
+    rows = rows.filter(function (m) { return m.usd >= state.whaleUsd; });
+  }
+  return rows;
+}
+
+function renderTrades() {
+  var rows = filteredTrades().slice(0, 80);
+  var total = state.matches.length;
+  var keepScroll = el.tradeList.scrollTop;
+  el.tradeCount.textContent = total + ' 笔 · 显示 ' + rows.length;
+  if (!rows.length) {
+    el.tradeList.innerHTML = '<div class="trade-empty">该筛选下暂无成交</div>';
+    return;
+  }
+  var html = rows.map(function (m) {
+    var t = timeFmt.format(new Date(m.ts));
+    var side = m.buy ? 'buy' : 'sell';
+    var whale = m.usd >= state.whaleUsd;
+    return '<div class="trade-row' + (whale ? ' whale' : '') + '">' +
+      '<span>' + t + '</span>' +
+      '<span class="side ' + side + '">' + (m.buy ? '买' : '卖') + '</span>' +
+      '<span class="px ' + side + '">' + fmtPrice(m.price) + '</span>' +
+      '<span>' + fmtQty(m.qty) + '</span>' +
+      '<span>' + fmtUsd(m.usd) + '</span>' +
+      '<a class="addr" href="' + SCAN + '/address/' + m.maker + '" target="_blank" rel="noopener noreferrer" title="' +
+      m.maker + '">' + shortAddr(m.maker) + '</a>' +
+      '</div>';
+  }).join('');
+  el.tradeList.innerHTML = html;
+  el.tradeList.scrollTop = keepScroll;
+}
+
+/* ---------- 8. 概览 / 交易者 / 资金流 ---------- */
+function renderStats() {
+  el.sHigh.textContent = state.high24 ? fmtPrice(state.high24) : '—';
+  el.sLow.textContent = state.low24 ? fmtPrice(state.low24) : '—';
+  el.sVol.innerHTML = (state.vol24 ? fmtQty(state.vol24) : '—') +
+    '<span class="u">' + state.pair.base + '</span>';
+  el.sQuote.innerHTML = (state.quote24 ? fmtUsd(state.quote24) : '—') + '<span class="u">USDT</span>';
+  el.sOpen.textContent = state.open24 ? fmtPrice(state.open24) : '—';
+  if (state.open24 && state.last) {
+    var chg = (state.last - state.open24) / state.open24 * 100;
+    el.change.textContent = pctText(chg);
+    el.change.className = 'price-chg ' + toneClass(chg);
+  }
+
+  var rows = state.matches.slice(0, 200);
+  var buyUsd = 0;
+  var sellUsd = 0;
+  rows.forEach(function (m) {
+    if (m.buy) { buyUsd += m.usd; } else { sellUsd += m.usd; }
+  });
+  var net = buyUsd - sellUsd;
+  el.flowBuy.textContent = fmtUsd(buyUsd);
+  el.flowSell.textContent = fmtUsd(sellUsd);
+  el.flowNet.textContent = (net >= 0 ? '+' : '-') + fmtUsd(Math.abs(net));
+  el.flowNet.className = 'v ' + toneClass(net);
+
+  var spanH = rows.length > 1 ? (rows[0].ts - rows[rows.length - 1].ts) / 3600000 : 0;
+  el.traderWindow.textContent = rows.length + ' 笔 / ' + spanH.toFixed(1) + ' 小时';
+}
+
+function renderTraders() {
+  var rows = state.matches.slice(0, 200);
+  var agg = {};
+  rows.forEach(function (m) {
+    if (!m.maker) { return; }
+    var a = agg[m.maker] || { usd: 0, n: 0, buy: 0 };
+    a.usd += m.usd;
+    a.n += 1;
+    if (m.buy) { a.buy += m.usd; }
+    agg[m.maker] = a;
+  });
+  var list = Object.keys(agg).map(function (k) {
+    return { addr: k, usd: agg[k].usd, n: agg[k].n, buy: agg[k].buy };
+  }).sort(function (a, b) { return b.usd - a.usd; }).slice(0, 6);
+
+  if (!list.length) {
+    el.traders.innerHTML = '<div class="trade-empty">暂无数据</div>';
+    return;
+  }
+  el.traders.innerHTML = list.map(function (r) {
+    var ratio = r.usd > 0 ? (r.buy / r.usd * 100) : 0;
+    return '<div class="trader-row">' +
+      '<a class="a" href="' + SCAN + '/address/' + r.addr + '" target="_blank" rel="noopener noreferrer" title="' +
+      r.addr + '">' + shortAddr(r.addr) + '</a>' +
+      '<span class="n">' + r.n + ' 笔 · 买 ' + ratio.toFixed(0) + '%</span>' +
+      '<span class="amt">' + fmtUsd(r.usd) + '</span>' +
+      '</div>';
+  }).join('');
+}
+
+/* ---------- 9. 告警 ---------- */
+var audioCtx = null;
+
+function beep(kind) {
+  if (!state.sound) { return; }
+  try {
+    if (!audioCtx) { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    var osc = audioCtx.createOscillator();
+    var gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = kind === 'whale' ? 620 : (kind === 'up' ? 880 : 440);
+    gain.gain.value = 0.06;
+    osc.connect(gain).connect(audioCtx.destination);
+    var t0 = audioCtx.currentTime;
+    gain.gain.setValueAtTime(0.06, t0);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.16);
+    osc.start(t0);
+    osc.stop(t0 + 0.18);
+  } catch (e) { /* 音频不可用时忽略 */ }
+}
+
+function notify(title, body) {
+  if (!state.notify || !('Notification' in window) || Notification.permission !== 'granted') { return; }
+  try {
+    new Notification(title, { body: body, silent: true });
+  } catch (e) { /* 忽略 */ }
+}
+
+function toast(title, msg, kind) {
+  var node = document.createElement('div');
+  node.className = 'toast' + (kind === 'warn' ? ' warn' : '');
+  node.innerHTML = '<div class="tt">' + title + '</div><div>' + msg + '</div>';
+  el.toastWrap.appendChild(node);
+  setTimeout(function () { node.remove(); }, 5200);
+}
+
+function pushLog(msg) {
+  var t = timeFmt.format(new Date());
+  state.alertLog.unshift({ t: t, msg: msg });
+  if (state.alertLog.length > 30) { state.alertLog.pop(); }
+  renderLog();
+}
+
+function renderLog() {
+  if (!state.alertLog.length) {
+    el.alertLog.innerHTML = '<span class="none">暂无告警记录</span>';
+    return;
+  }
+  el.alertLog.innerHTML = state.alertLog.slice(0, 8).map(function (r) {
+    return '<div><span class="t">' + r.t + '</span>' + r.msg + '</div>';
+  }).join('');
+}
+
+function fire(kind, msg) {
+  pushLog(msg);
+  toast(kind === 'whale' ? '大单' : '价格告警', msg, 'warn');
+  beep(kind);
+  notify('ENI 终端 · ' + state.pair.label, msg);
+}
+
+function checkPriceAlerts(prev, now) {
+  if (prev == null || now == null) { return; }
+  var a = state.alerts.above;
+  var b = state.alerts.below;
+
+  if (a && now >= a && prev < a) {
+    fire('up', '价格上破 ' + fmtPrice(a) + '，现价 ' + fmtPrice(now));
+  }
+  if (b && now <= b && prev > b) {
+    fire('down', '价格下破 ' + fmtPrice(b) + '，现价 ' + fmtPrice(now));
+  }
+}
+
+function checkImbalance() {
+  var th = Number(state.alerts.imbalance || 0);
+  if (!th) {
+    state.imbalanceSide = null;
+    return;
+  }
+  var bid = state.bidShare || 50;
+  var side = bid >= th ? 'bid' : ((100 - bid) >= th ? 'ask' : null);
+  if (side === state.imbalanceSide) { return; }
+  state.imbalanceSide = side;
+  if (!side) { return; }
+  var now = Date.now();
+  if (state.imbalanceCool && now - state.imbalanceCool < 300000) { return; }
+  state.imbalanceCool = now;
+  if (side === 'bid') {
+    fire('up', '买盘挂单占比 ' + bid.toFixed(0) + '%，买盘占优');
+  } else {
+    fire('down', '卖盘挂单占比 ' + (100 - bid).toFixed(0) + '%，卖压占优');
+  }
+}
+
+function checkWhales(newRows) {
+  var th = state.whaleUsd;
+  newRows.forEach(function (m) {
+    if (m.usd >= th && m.usd >= 200) {
+      fire('whale', (m.buy ? '主动买 ' : '主动卖 ') + fmtUsd(m.usd) + ' USDT @ ' + fmtPrice(m.price) +
+        ' · ' + shortAddr(m.maker));
+    }
+  });
+}
+
+/* ---------- 10. 数据加载 ---------- */
+function setOnline(ok, ms) {
+  state.online = ok;
+  state.latency = ms;
+  if (ok) {
+    el.dot.className = 'dot';
+    el.statusText.textContent = '已连接 · ' + (ms ? ms + ' ms' : '3s 刷新');
+  } else {
+    el.dot.className = 'dot off';
+    el.statusText.textContent = '连接中断，重试中';
+  }
+}
+
+function loadTrades() {
+  var pair = state.pair;
+  var q = '{ matches(first: 80, orderBy: timestamp, orderDirection: desc, where: {pairAddress: "' +
+    pair.ob + '"}) { id amountIn amountOut price timestamp orderType maker taker } }';
+  return gql(q).then(function (data) {
+    var rows = data.matches || [];
+    var fresh = mergeMatches(rows);
+    if (rows.length) {
+      var latest = rows.reduce(function (a, b) {
+        return Number(a.timestamp) >= Number(b.timestamp) ? a : b;
+      });
+      state.prevLast = state.last;
+      state.last = wei(latest.price);
+      if (state.last) {
+        el.last.textContent = fmtPrice(state.last);
+        el.last.style.color = state.prevLast != null
+          ? (state.last >= state.prevLast ? PALETTE.up : PALETTE.down)
+          : PALETTE.text;
+      }
+    }
+    if (fresh && state.primed) {
+      checkWhales(state.matches.slice(0, fresh));
+    }
+    if (rows.length) { state.primed = true; }
+    renderTape();
+    renderTrades();
+    renderStats();
+    renderTraders();
+    if (!state.lastStore || Date.now() - state.lastStore >= 15000) {
+      state.lastStore = Date.now();
+      writeStore({ trades: { pairKey: state.pair.key, rows: state.matches.slice(0, 200) } });
+    }
+    return rows.length;
+  });
+}
+
+function loadBook() {
+  var pair = state.pair;
+  var bidQ = '{ orders(first: 45, orderBy: price, orderDirection: desc, where: {pairAddress: "' +
+    pair.ob + '", isActive: true, orderType: 0}) { price amountIn amountOut } }';
+  var askQ = '{ orders(first: 45, orderBy: price, orderDirection: asc, where: {pairAddress: "' +
+    pair.ob + '", isActive: true, orderType: 1}) { price amountIn amountOut } }';
+  return Promise.all([gql(bidQ), gql(askQ)]).then(function (res) {
+    state.bids = normalizeOrders(res[0].orders || [], true);
+    state.asks = normalizeOrders(res[1].orders || [], false);
+    renderBook();
+    checkImbalance();
+    renderStats();
+  });
+}
+
+function intervalLabel(ts, interval) {
+  var d = new Date(ts * 1000);
+  if (interval === '1d') {
+    return (d.getMonth() + 1) + '/' + d.getDate();
+  }
+  if (interval === '1h' || interval === '4h') {
+    return (d.getMonth() + 1) + '/' + d.getDate() + ' ' +
+      String(d.getHours()).padStart(2, '0') + ':00';
+  }
+  return timeFmt.format(d).slice(0, 5);
+}
+
+function loadKlines() {
+  var pair = state.pair;
+  var itv = state.interval;
+  var q = '{ klines(first: ' + KLINE_LIMIT + ', orderBy: timestamp, orderDirection: desc, where: {pairAddress: "' +
+    pair.ob + '", interval: "' + itv + '"}) { open high low close volume quoteVolume timestamp } }';
+  return gql(q).then(function (data) {
+    var rows = (data.klines || []).slice().reverse();
+    var step = STEP_SEC[itv] || 60;
+    var filled = [];
+    var prev = null;
+    var MAX_FILL = 900;
+
+    rows.forEach(function (k) {
+      var ts = Number(k.timestamp);
+      var item = {
+        ts: ts,
+        o: Number(k.open),
+        h: Number(k.high),
+        l: Number(k.low),
+        c: Number(k.close),
+        v: wei(k.volume),
+        q: wei(k.quoteVolume),
+        empty: false
+      };
+      if (prev) {
+        var gap = Math.round((ts - prev.ts) / step);
+        if (gap > 1 && gap <= MAX_FILL) {
+          /* 子图只在有成交时生成 K 线，这里按周期补平，保证时间轴连续可读 */
+          for (var g = 1; g < gap; g += 1) {
+            var c0 = prev.c;
+            filled.push({
+              ts: prev.ts + g * step, o: c0, h: c0, l: c0, c: c0, v: 0, q: 0, empty: true
+            });
+          }
+        }
+      }
+      filled.push(item);
+      prev = item;
+    });
+
+    /* 补到当前周期边界，让右端贴住实时 */
+    if (filled.length) {
+      var lastTs = filled[filled.length - 1].ts;
+      var nowBucket = Math.floor(Date.now() / 1000 / step) * step;
+      var tailGap = Math.round((nowBucket - lastTs) / step);
+      if (tailGap > 0 && tailGap <= MAX_FILL) {
+        var c1 = filled[filled.length - 1].c;
+        for (var t = 1; t <= tailGap; t += 1) {
+          filled.push({
+            ts: lastTs + t * step, o: c1, h: c1, l: c1, c: c1, v: 0, q: 0, empty: true
+          });
+        }
+      }
+    }
+
+    state.klines = filled.map(function (k) {
+      var d = new Date(k.ts * 1000);
+      var label = intervalLabel(k.ts, itv);
+      return {
+        time: label,
+        shortTime: label,
+        fullTime: clockFmt.format(d),
+        o: k.o, h: k.h, l: k.l, c: k.c, v: k.v, q: k.q, empty: k.empty
+      };
+    });
+
+    if (state.klines.length && state.last == null) {
+      var tail = state.klines[state.klines.length - 1];
+      state.last = tail.c;
+      el.last.textContent = fmtPrice(state.last);
+    }
+    renderChart();
+  });
+}
+
+function loadStats() {
+  var pair = state.pair;
+  var q = '{ klines(first: 24, orderBy: timestamp, orderDirection: desc, where: {pairAddress: "' +
+    pair.ob + '", interval: "1h"}) { high low close open volume quoteVolume timestamp } }';
+  return gql(q).then(function (data) {
+    var rows = (data.klines || []).slice().reverse();
+    if (!rows.length) { return; }
+    var hi = -Infinity;
+    var lo = Infinity;
+    var vol = 0;
+    var quote = 0;
+    rows.forEach(function (k) {
+      hi = Math.max(hi, Number(k.high));
+      lo = Math.min(lo, Number(k.low));
+      vol += wei(k.volume);
+      quote += wei(k.quoteVolume);
+    });
+    state.high24 = hi;
+    state.low24 = lo;
+    state.vol24 = vol;
+    state.quote24 = quote;
+    state.open24 = Number(rows[0].open);
+    el.sHigh.textContent = fmtPrice(hi);
+    el.sLow.textContent = fmtPrice(lo);
+    el.sVol.innerHTML = fmtQty(vol) + '<span class="u">' + pair.base + '</span>';
+    el.sQuote.innerHTML = fmtUsd(quote) + '<span class="u">USDT</span>';
+    el.sOpen.textContent = fmtPrice(state.open24);
+    if (state.last != null && state.open24) {
+      var chg = (state.last - state.open24) / state.open24 * 100;
+      el.change.textContent = pctText(chg);
+      el.change.className = 'price-chg ' + toneClass(chg);
+    }
+  });
+}
+
+/* 从子图发现全部订单簿交易对，新上线的币对无需改代码即可出现 */
+function rpcCall(method, params) {
+  return fetch(RPC, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: method, params: params })
+  }).then(function (r) { return r.json(); });
+}
+
+function readSymbol(addr) {
+  return rpcCall('eth_call', [{ to: addr, data: '0x95d89b41' }, 'latest']).then(function (res) {
+    var hex = (res.result || '').slice(2);
+    if (hex.length < 128) { return null; }
+    var len = parseInt(hex.slice(64, 128), 16);
+    if (!len || len > 32) { return null; }
+    var body = hex.slice(128, 128 + len * 2);
+    var s = '';
+    for (var i = 0; i < body.length; i += 2) {
+      s += String.fromCharCode(parseInt(body.substr(i, 2), 16));
+    }
+    s = s.replace(/[^\x20-\x7e]/g, '').trim();
+    return s || null;
+  }).catch(function () { return null; });
+}
+
+function discoverPairs() {
+  return gql('{ newOrderBooks(first: 12, where: {isDeleted: false}) { tokenA tokenB orderBook } }')
+    .then(function (data) {
+      var rows = data.newOrderBooks || [];
+      var known = PAIRS.map(function (p) { return p.ob.toLowerCase(); });
+      var extra = rows.filter(function (r) {
+        return known.indexOf(String(r.orderBook).toLowerCase()) < 0;
+      }).slice(0, 4);
+
+      var chain = Promise.resolve();
+      extra.forEach(function (r) {
+        chain = chain.then(function () {
+          return readSymbol(r.tokenA).then(function (sym) {
+            PAIRS.push({
+              key: 'auto-' + String(r.orderBook).slice(2, 8),
+              label: (sym || String(r.tokenA).slice(2, 8)) + '/USDT',
+              base: sym || 'BASE',
+              quote: 'USDT',
+              baseToken: r.tokenA,
+              quoteToken: r.tokenB,
+              ob: r.orderBook,
+              auto: true
+            });
+          });
+        });
+      });
+
+      return chain.then(function () {
+        if (extra.length) { renderPairs(); }
+      });
+    })
+    .catch(function () { /* 发现失败不影响主流程 */ });
+}
+
+/* ---------- 11. 调度 ---------- */
+var fastTimer = null;
+var klineTimer = null;
+var statsTimer = null;
+var running = false;
+var loopGen = 0;
+
+function scheduleFast() {
+  if (!running) { return; }
+  clearTimeout(fastTimer);
+  fastTimer = setTimeout(loopFast, POLL_FAST);
+}
+
+function loopFast() {
+  if (!running) { return; }
+  if (document.hidden) {
+    fastTimer = setTimeout(loopFast, POLL_FAST * 3);
+    return;
+  }
+  var myGen = loopGen;
+  var started = performance.now();
+  Promise.allSettled([loadTrades(), loadBook()]).then(function (results) {
+    if (myGen !== loopGen) { return; }
+    var ms = Math.round(performance.now() - started);
+    var ok = results[0].status === 'fulfilled' || results[1].status === 'fulfilled';
+    setOnline(ok, ms);
+    checkPriceAlerts(state.prevLast, state.last);
+    state.lastFast = Date.now();
+    scheduleFast();
+  });
+}
+
+/* 切换交易对 / 周期后重启轮询，避免旧循环并行 */
+function restartLoops() {
+  loopGen += 1;
+  clearTimeout(fastTimer);
+  clearTimeout(klineTimer);
+  clearTimeout(statsTimer);
+  running = true;
+  loopFast();
+  loopKline();
+  loopStats();
+}
+
+function loopKline() {
+  if (!running) { return; }
+  var myGen = loopGen;
+  loadKlines().catch(function () { /* 保留上一帧 */ }).then(function () {
+    if (myGen !== loopGen) { return; }
+    clearTimeout(klineTimer);
+    var period = state.interval === '1m' ? 5000 : (state.interval === '5m' ? 8000 : 15000);
+    klineTimer = setTimeout(loopKline, period);
+  });
+}
+
+function loopStats() {
+  if (!running) { return; }
+  var myGen = loopGen;
+  loadStats().catch(function () { /* 忽略单次失败 */ }).then(function () {
+    if (myGen !== loopGen) { return; }
+    clearTimeout(statsTimer);
+    statsTimer = setTimeout(loopStats, 20000);
+  });
+}
+
+function start() {
+  restartLoops();
+  discoverPairs();
+  setInterval(function () {
+    el.footClock.textContent = clockFmt.format(new Date()) + ' CST';
+  }, 1000);
+  el.footClock.textContent = clockFmt.format(new Date()) + ' CST';
+}
+
+/* ---------- 12. 交互 ---------- */
+function renderPairs() {
+  el.pairs.innerHTML = PAIRS.map(function (p) {
+    return '<button type="button" class="pair-btn" data-key="' + p.key + '" aria-pressed="' +
+      (p.key === state.pair.key ? 'true' : 'false') + '">' + p.label + '</button>';
+  }).join('');
+}
+
+function renderIntervals() {
+  el.tf.innerHTML = INTERVALS.map(function (v) {
+    return '<button type="button" class="tf-btn" data-i="' + v + '" aria-pressed="' +
+      (v === state.interval ? 'true' : 'false') + '">' + v.toUpperCase() + '</button>';
+  }).join('');
+}
+
+function switchPair(key) {
+  var next = PAIRS.filter(function (p) { return p.key === key; })[0];
+  if (!next || next.key === state.pair.key) { return; }
+  var saved = readStore();
+  var savedTrades = saved && saved.trades && saved.trades.pairKey === next.key ? saved.trades.rows : [];
+
+  state.pair = next;
+  state.last = null;
+  state.prevLast = null;
+  state.zoom = null;
+  state.open24 = null;
+  state.high24 = null;
+  state.low24 = null;
+  state.vol24 = null;
+  state.quote24 = null;
+  state.klines = [];
+  state.bids = [];
+  state.asks = [];
+  state.bestAsk = null;
+  state.bestBid = null;
+  state.matches = savedTrades || [];
+  state.bidShare = 50;
+
+  state.alerts.above = null;
+  state.alerts.below = null;
+  state.armed.above = false;
+  state.armed.below = false;
+
+  el.alertAbove.value = '';
+  el.alertBelow.value = '';
+  el.armAbove.textContent = '启用';
+  el.armBelow.textContent = '启用';
+  el.armAbove.style.borderColor = '';
+  el.armBelow.style.borderColor = '';
+  el.last.textContent = '—';
+  el.change.textContent = '—';
+  el.change.className = 'price-chg flat';
+  el.chartPair.textContent = next.label;
+  el.sVolUnit.textContent = next.base;
+
+  renderPairs();
+  renderTape();
+  renderTrades();
+  renderBook();
+  renderChart();
+  writeStore({ pairKey: next.key });
+  restartLoops();
+}
+
+el.pairs.addEventListener('click', function (e) {
+  var btn = e.target.closest('.pair-btn');
+  if (btn) { switchPair(btn.dataset.key); }
+});
+
+el.tf.addEventListener('click', function (e) {
+  var btn = e.target.closest('.tf-btn');
+  if (!btn) { return; }
+  var v = btn.dataset.i;
+  if (v === state.interval) { return; }
+  state.interval = v;
+  state.zoom = null;
+  renderIntervals();
+  writeStore({ interval: v });
+  loadKlines();
+});
+
+el.filter.addEventListener('click', function (e) {
+  var btn = e.target.closest('button[data-f]');
+  if (!btn) { return; }
+  state.filter = btn.dataset.f;
+  Array.prototype.forEach.call(el.filter.querySelectorAll('button'), function (b) {
+    b.setAttribute('aria-pressed', b.dataset.f === state.filter ? 'true' : 'false');
+  });
+  renderTrades();
+});
+
+el.whaleSelect.addEventListener('change', function () {
+  state.whaleUsd = Number(el.whaleSelect.value);
+  writeStore({ whaleUsd: state.whaleUsd });
+  renderTape();
+  renderTrades();
+});
+
+el.exportBtn.addEventListener('click', function () {
+  var rows = filteredTrades();
+  if (!rows.length) {
+    toast('导出', '当前筛选下没有可导出的成交', 'warn');
+    return;
+  }
+  var head = ['时间(CST)', '方向', '价格(USDT)', '数量(' + state.pair.base + ')',
+    '金额(USDT)', '交易者', 'TxHash'].join(',');
+  var body = rows.map(function (m) {
+    return [
+      clockFmt.format(new Date(m.ts)),
+      m.buy ? '买入' : '卖出',
+      m.price.toFixed(6),
+      m.qty.toFixed(6),
+      m.usd.toFixed(2),
+      m.maker,
+      m.tx
+    ].join(',');
+  }).join('\r\n');
+  var blob = new Blob(['\uFEFF' + head + '\r\n' + body], { type: 'text/csv;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'ENI_' + state.pair.label.replace('/', '_') + '_' +
+    clockFmt.format(new Date()).replace(/[^\d]/g, '').slice(0, 12) + '.csv';
+  a.click();
+  setTimeout(function () { URL.revokeObjectURL(url); }, 1200);
+  toast('已导出', rows.length + ' 笔成交已下载为 CSV');
+});
+
+el.armAbove.addEventListener('click', function () {
+  var v = parseFloat(el.alertAbove.value);
+  if (!isFinite(v) || v <= 0) {
+    toast('设置告警', '请先输入一个有效的价格', 'warn');
+    return;
+  }
+  var on = el.armAbove.getAttribute('data-on') === '1';
+  if (on) {
+    el.armAbove.textContent = '启用';
+    el.armAbove.setAttribute('data-on', '0');
+    el.armAbove.style.borderColor = '';
+    state.alerts.above = null;
+    pushLog('已关闭上破告警');
+  } else {
+    el.armAbove.textContent = '已启用';
+    el.armAbove.setAttribute('data-on', '1');
+    el.armAbove.style.borderColor = '#17614f';
+    state.alerts.above = v;
+    pushLog('已启用上破告警 ' + fmtPrice(v));
+  }
+  writeStore({ alerts: state.alerts });
+});
+
+el.armBelow.addEventListener('click', function () {
+  var v = parseFloat(el.alertBelow.value);
+  if (!isFinite(v) || v <= 0) {
+    toast('设置告警', '请先输入一个有效的价格', 'warn');
+    return;
+  }
+  var on = el.armBelow.getAttribute('data-on') === '1';
+  if (on) {
+    el.armBelow.textContent = '启用';
+    el.armBelow.setAttribute('data-on', '0');
+    el.armBelow.style.borderColor = '';
+    state.alerts.below = null;
+    pushLog('已关闭下破告警');
+  } else {
+    el.armBelow.textContent = '已启用';
+    el.armBelow.setAttribute('data-on', '1');
+    el.armBelow.style.borderColor = '#17614f';
+    state.alerts.below = v;
+    pushLog('已启用下破告警 ' + fmtPrice(v));
+  }
+  writeStore({ alerts: state.alerts });
+});
+
+el.imbalanceSelect.addEventListener('change', function () {
+  state.alerts.imbalance = Number(el.imbalanceSelect.value);
+  state.armed.imbalance = false;
+  writeStore({ alerts: state.alerts });
+});
+
+el.soundSwitch.addEventListener('click', function () {
+  state.sound = !state.sound;
+  el.soundSwitch.setAttribute('aria-checked', state.sound ? 'true' : 'false');
+  writeStore({ sound: state.sound });
+  if (state.sound) { beep('up'); }
+});
+
+el.notifySwitch.addEventListener('click', function () {
+  if (!('Notification' in window) || window.isSecureContext === false) {
+    /* 手机经局域网 http 访问时不是安全上下文，浏览器不给通知权限 */
+    toast('系统通知', '当前环境不可用，请改用声音告警', 'warn');
+    el.notifyHint.textContent = '需 HTTPS';
+    return;
+  }
+  if (Notification.permission === 'granted') {
+    state.notify = !state.notify;
+    el.notifySwitch.setAttribute('aria-checked', state.notify ? 'true' : 'false');
+    writeStore({ notify: state.notify });
+    return;
+  }
+  Notification.requestPermission().then(function (p) {
+    if (p === 'granted') {
+      state.notify = true;
+      el.notifySwitch.setAttribute('aria-checked', 'true');
+      el.notifyHint.textContent = '已授权';
+      writeStore({ notify: true });
+    } else {
+      el.notifyHint.textContent = '被拒绝';
+    }
+  });
+});
+
+/* 恢复界面初值 */
+(function restoreUI() {
+  el.whaleSelect.value = String(state.whaleUsd);
+  el.imbalanceSelect.value = String(state.alerts.imbalance || 0);
+  el.soundSwitch.setAttribute('aria-checked', state.sound ? 'true' : 'false');
+  if (state.alerts.above) {
+    el.alertAbove.value = String(state.alerts.above);
+    el.armAbove.textContent = '已启用';
+    el.armAbove.setAttribute('data-on', '1');
+    el.armAbove.style.borderColor = '#17614f';
+  }
+  if (state.alerts.below) {
+    el.alertBelow.value = String(state.alerts.below);
+    el.armBelow.textContent = '已启用';
+    el.armBelow.setAttribute('data-on', '1');
+    el.armBelow.style.borderColor = '#17614f';
+  }
+  if (window.isSecureContext === false) {
+    /* 手机走局域网 http 时通知不可用，明确告知而不是留一个点了没反应的开关 */
+    el.notifyHint.textContent = '需 HTTPS';
+    el.notifySwitch.setAttribute('aria-checked', 'false');
+    state.notify = false;
+  } else if ('Notification' in window && Notification.permission === 'granted') {
+    el.notifyHint.textContent = '已授权';
+    el.notifySwitch.setAttribute('aria-checked', state.notify ? 'true' : 'false');
+  }
+  el.chartPair.textContent = state.pair.label;
+  el.sVolUnit.textContent = state.pair.base;
+})();
+
+/* ---------- 13. 启动 ---------- */
+renderPairs();
+renderIntervals();
+initChart();
+renderTape();
+renderTrades();
+renderStats();
+renderTraders();
+renderLog();
+start();
+</script>
+</body>
+</html>
