@@ -37,6 +37,9 @@ body {
   font-size: 13px;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
+  /* 手机状态栏 / 底部 home 指示条避让：普通浏览器里 inset 为 0，无影响 */
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 body::before {
   content: '';
